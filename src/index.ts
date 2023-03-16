@@ -1,3 +1,3 @@
 export { default as Button } from './Button';
 export { default as Foo } from './Foo';
-export { default as Steps } from './Steps';
+export { BUTTON_KEYS, default as Steps, useFooter } from './Steps';
