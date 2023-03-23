@@ -1,22 +1,26 @@
-import { useFooter } from 'l-idea';
+import { Steps } from 'l-idea';
 import React from 'react';
 
 export default () => {
-  const { current, onCancel, onNext, setLoading, onChange } = useFooter();
+  Steps.useFooterEffect(
+    ({ dispatch }) => {
+      dispatch(-1);
+    },
+    [Steps.BUTTON_KEYS.PREV],
+  );
 
-  onCancel(() => {
-    onChange(current - 1);
-  });
-
-  onNext(() => {
-    setLoading(true);
-    setTimeout(() => {
-      Promise.resolve().finally(() => {
-        setLoading(false);
-        onChange(current + 1);
-      });
-    }, 200);
-  });
+  Steps.useFooterEffect(
+    ({ setLoading, dispatch }) => {
+      setLoading(true);
+      setTimeout(() => {
+        Promise.resolve().finally(() => {
+          setLoading(false);
+          dispatch(1);
+        });
+      }, 200);
+    },
+    [Steps.BUTTON_KEYS.NEXT],
+  );
 
   return <div>second</div>;
 };

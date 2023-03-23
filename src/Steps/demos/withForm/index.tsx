@@ -5,11 +5,13 @@ import Second from './second';
 import Third from './third';
 
 export default () => {
+  const [form] = Steps.useForm();
   const [current, setCurrent] = useState('first');
 
   return (
     <div style={{ height: 500 }}>
       <Steps
+        form={form}
         current={current}
         onChange={setCurrent}
         items={[

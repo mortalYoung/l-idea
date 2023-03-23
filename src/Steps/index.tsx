@@ -2,157 +2,140 @@ import {
   Button,
   Card,
   Form,
+  FormInstance,
   Space,
   Spin,
   Steps as RawSteps,
-  type ButtonProps,
   type StepProps,
 } from 'antd';
 import EventEmitter from 'eventemitter3';
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.less';
 
 const ee = new EventEmitter();
 
-export const BUTTON_KEYS = {
+const BUTTON_KEYS = {
+  CANCEL: '$$cancel',
   PREV: '$$prev',
   NEXT: '$$next',
   ACHIEVE: '$$achieve',
 } as const;
 
 interface IStepsProps {
+  form?: FormInstance;
   items: (StepProps & {
+    key: string;
     content: () => React.ReactNode;
-    footer: (
-      PREV: JSX.Element,
-      NEXT: JSX.Element,
-      ACHIEVE: JSX.Element,
-    ) => React.ReactNode;
   })[];
-  buttonProps?: {
-    [BUTTON_KEYS.PREV]?: Pick<ButtonProps, 'type' | 'className' | 'children'>;
-    [BUTTON_KEYS.NEXT]?: Pick<ButtonProps, 'type' | 'className' | 'children'>;
-    [BUTTON_KEYS.ACHIEVE]?: Pick<
-      ButtonProps,
-      'type' | 'className' | 'children'
-    >;
-  };
-  current: number;
-  onChange: (current: number) => void;
+  current: string;
+  onChange: (current: string) => void;
 }
 
-const context = React.createContext<{
-  current: number;
+interface IContextProps {
+  form?: FormInstance;
+  current: string;
   loading: boolean;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  dispatch: (sign: number) => void;
   onChange: IStepsProps['onChange'];
-}>({ current: 1, loading: false, setLoading: () => {}, onChange: () => {} });
+}
 
-export const useFooter = () => {
+const context = React.createContext<IContextProps>({
+  current: '',
+  loading: false,
+  setLoading: () => {},
+  dispatch: () => {},
+  onChange: () => {},
+});
+
+function useFooterEffect(effect: (ctx: IContextProps) => void, deps: string[]) {
   const ctx = useContext(context);
-  const lastFunc = useRef<{
-    onCancel: null | (() => void);
-    onNext: null | (() => void);
-    onSubmit: null | (() => void);
-  }>({
-    onCancel: null,
-    onNext: null,
-    onSubmit: null,
-  });
-  const onCancel = (func: () => Promise<boolean> | void) => {
-    if (!func) return;
-    if (lastFunc.current.onCancel) {
-      ee.off(BUTTON_KEYS.PREV, lastFunc.current.onCancel);
-    }
-    ee.on(BUTTON_KEYS.PREV, func);
-    lastFunc.current.onCancel = func;
-  };
-
-  const onNext = (func: () => Promise<boolean> | void) => {
-    if (!func) return;
-    if (lastFunc.current.onNext) {
-      ee.off(BUTTON_KEYS.NEXT, lastFunc.current.onNext);
-    }
-    ee.on(BUTTON_KEYS.NEXT, func);
-    lastFunc.current.onNext = func;
-  };
-
-  const onSubmit = (func: () => Promise<boolean> | void) => {
-    if (!func) return;
-    if (lastFunc.current.onSubmit) {
-      ee.off(BUTTON_KEYS.ACHIEVE, lastFunc.current.onSubmit);
-    }
-    ee.on(BUTTON_KEYS.ACHIEVE, func);
-    lastFunc.current.onSubmit = func;
-  };
+  const func = useRef(effect);
 
   useEffect(() => {
+    func.current = effect;
+  });
+
+  useEffect(() => {
+    const persisFunc: (() => void)[] = [];
+    deps.forEach((dep) => {
+      const tmpFunc = () => func.current(ctx);
+      persisFunc.push(tmpFunc);
+      ee.on(dep, tmpFunc);
+    });
+
     return () => {
-      if (lastFunc.current.onCancel)
-        ee.off(BUTTON_KEYS.PREV, lastFunc.current.onCancel);
-      if (lastFunc.current.onNext)
-        ee.off(BUTTON_KEYS.NEXT, lastFunc.current.onNext);
-      if (lastFunc.current.onSubmit)
-        ee.off(BUTTON_KEYS.ACHIEVE, lastFunc.current.onSubmit);
+      deps.forEach((dep, idx) => {
+        ee.off(dep, persisFunc[idx]);
+      });
     };
   }, []);
+}
 
-  return {
-    ...ctx,
-    onCancel,
-    onNext,
-    onSubmit,
-  };
-};
+function FormContainer({
+  form,
+  children,
+}: {
+  form?: FormInstance;
+  children: React.ReactNode;
+}) {
+  return form ? (
+    <Form validateTrigger="onBlur" layout="vertical" form={form}>
+      {children}
+    </Form>
+  ) : (
+    <>{children}</>
+  );
+}
 
-function Steps({ items, current, buttonProps, onChange }: IStepsProps) {
+function Steps({ form, items, current, onChange }: IStepsProps) {
   const [loading, setLoading] = useState(false);
 
-  const { children: prevChildren, ...restPrevProps } =
-    buttonProps?.[BUTTON_KEYS.PREV] || {};
-  const PREV_BUTTON = (
-    <Button
-      onClick={() => {
-        ee.emit(BUTTON_KEYS.PREV);
-      }}
-      {...restPrevProps}
-    >
-      {prevChildren || '上一步'}
-    </Button>
-  );
+  const dispatch = (sign: number) => {
+    if (sign === 0) return;
+    const stepsCurrent = items.findIndex((i) => i.key === current);
+    // 如果没有对应步骤，大于 0 则兜底最后一步，小于 0 则兜底第一步
+    const next = items[stepsCurrent + sign] || items.at(sign > 0 ? -1 : 0);
+    onChange(next.key);
+  };
 
-  const { children: nextChildren, ...restNextProps } =
-    buttonProps?.[BUTTON_KEYS.NEXT] || {};
-  const NEXT_BUTTON = (
-    <Button
-      type="primary"
-      loading={loading}
-      onClick={() => {
-        ee.emit(BUTTON_KEYS.NEXT);
-      }}
-      {...restNextProps}
-    >
-      {nextChildren || '下一步'}
-    </Button>
-  );
+  const renderPrev = () => {
+    const stepsCurrent = items.findIndex((i) => i.key === current);
+    if (stepsCurrent === 0) {
+      return <Button onClick={() => ee.emit(BUTTON_KEYS.CANCEL)}>取消</Button>;
+    }
+    return <Button onClick={() => ee.emit(BUTTON_KEYS.PREV)}>上一步</Button>;
+  };
 
-  const { children: achieveChildren, ...restAchieveProps } =
-    buttonProps?.[BUTTON_KEYS.NEXT] || {};
-  const ACHIEVE_BUTTON = (
-    <Button
-      type="primary"
-      loading={loading}
-      onClick={() => {
-        ee.emit(BUTTON_KEYS.ACHIEVE);
-      }}
-      {...restAchieveProps}
-    >
-      {achieveChildren || '完成'}
-    </Button>
+  const renderNext = () => {
+    const stepsCurrent = items.findIndex((i) => i.key === current);
+    if (stepsCurrent === items.length - 1) {
+      return (
+        <Button
+          onClick={() => ee.emit(BUTTON_KEYS.ACHIEVE)}
+          ghost
+          type="primary"
+        >
+          完成
+        </Button>
+      );
+    }
+    return (
+      <Button type="primary" onClick={() => ee.emit(BUTTON_KEYS.NEXT)}>
+        下一步
+      </Button>
+    );
+  };
+
+  const stepsCurrent = useMemo(
+    () => items.findIndex((i) => i.key === current),
+    [current, items],
   );
 
   return (
-    <context.Provider value={{ current, onChange, loading, setLoading }}>
+    <context.Provider
+      value={{ current, form, onChange, loading, dispatch, setLoading }}
+    >
       <Card
         className="l-steps-container"
         hoverable={false}
@@ -160,17 +143,22 @@ function Steps({ items, current, buttonProps, onChange }: IStepsProps) {
         style={{ boxShadow: 'none' }}
       >
         <RawSteps
-          current={current}
-          onChange={onChange}
+          current={stepsCurrent}
+          onChange={(idx) => onChange(items[idx]?.key)}
           items={items}
           className="l-steps-header"
         />
         <Spin spinning={loading}>
-          <div className="l-steps-content">{items[current].content()}</div>
+          <div className="l-steps-content">
+            <FormContainer form={form}>
+              {items[stepsCurrent]?.content()}
+            </FormContainer>
+          </div>
         </Spin>
         <footer className="l-steps-footer">
           <Space size={8}>
-            {items[current].footer?.(PREV_BUTTON, NEXT_BUTTON, ACHIEVE_BUTTON)}
+            {renderPrev()}
+            {renderNext()}
           </Space>
         </footer>
       </Card>
@@ -179,5 +167,7 @@ function Steps({ items, current, buttonProps, onChange }: IStepsProps) {
 }
 
 Steps.useForm = Form.useForm;
+Steps.useFooterEffect = useFooterEffect;
+Steps.BUTTON_KEYS = BUTTON_KEYS;
 
 export default Steps;
