@@ -1,8 +1,10 @@
-import { Descriptions, Form } from 'antd';
+import { Descriptions, Form, Select } from 'antd';
 import { Steps } from 'l-idea';
 import React from 'react';
 
 export default () => {
+  const form = Form.useFormInstance();
+
   Steps.useFooterEffect(
     ({ dispatch }) => {
       dispatch(-1);
@@ -13,30 +15,86 @@ export default () => {
   Steps.useFooterEffect(
     ({ setLoading, dispatch }) => {
       setLoading(true);
-      setTimeout(() => {
-        Promise.resolve().finally(() => {
-          setLoading(false);
+      form
+        .validateFields()
+        .then(() => {
           dispatch(1);
+        })
+        .finally(() => {
+          setLoading(false);
         });
-      }, 200);
     },
     [Steps.BUTTON_KEYS.NEXT],
   );
 
   return (
-    <div style={{ width: 350, margin: '12px auto' }}>
-      <Form.Item noStyle dependencies={['name', 'gentle']}>
+    <>
+      <Form.Item noStyle dependencies={['basicInfo']}>
         {({ getFieldValue }) => (
           <Descriptions bordered>
             <Descriptions.Item label="姓名">
-              {getFieldValue('name')}
+              {getFieldValue(['basicInfo', 'name'])}
             </Descriptions.Item>
             <Descriptions.Item label="性别">
-              {getFieldValue('gentle').label}
+              {getFieldValue(['basicInfo', 'gentle'])}
+            </Descriptions.Item>
+            <Descriptions.Item label="年龄">
+              {getFieldValue(['basicInfo', 'age'])}
+            </Descriptions.Item>
+            <Descriptions.Item label="地址">
+              {getFieldValue(['basicInfo', 'address'])}
             </Descriptions.Item>
           </Descriptions>
         )}
       </Form.Item>
-    </div>
+      <Form.Item noStyle dependencies={[['basicInfo', 'gentle']]}>
+        {({ getFieldValue }) => {
+          const gentle = getFieldValue(['basicInfo', 'gentle']);
+          switch (gentle) {
+            case 'man':
+              return (
+                <Form.Item label="wife" name={['techInfo', 'wife']}>
+                  <Select
+                    allowClear
+                    options={[
+                      {
+                        value: 1,
+                        label: 'wife1',
+                      },
+                    ]}
+                  />
+                </Form.Item>
+              );
+            case 'woman':
+              return (
+                <Form.Item label="husband" name={['techInfo', 'husband']}>
+                  <Select
+                    allowClear
+                    options={[
+                      {
+                        value: 1,
+                        label: 'husband1',
+                      },
+                    ]}
+                  />
+                </Form.Item>
+              );
+
+            default:
+              return null;
+          }
+        }}
+      </Form.Item>
+      <Form.Item label="工作" name={['techInfo', 'workFor']} initialValue={1}>
+        <Select
+          options={[
+            {
+              label: 'dtstack',
+              value: 1,
+            },
+          ]}
+        />
+      </Form.Item>
+    </>
   );
 };

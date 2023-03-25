@@ -1,8 +1,6 @@
 import {
   Button,
   Card,
-  Form,
-  FormInstance,
   Space,
   Spin,
   Steps as RawSteps,
@@ -12,8 +10,6 @@ import EventEmitter from 'eventemitter3';
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.less';
 
-const ee = new EventEmitter();
-
 const BUTTON_KEYS = {
   CANCEL: '$$cancel',
   PREV: '$$prev',
@@ -22,17 +18,17 @@ const BUTTON_KEYS = {
 } as const;
 
 interface IStepsProps {
-  form?: FormInstance;
   items: (StepProps & {
     key: string;
     content: () => React.ReactNode;
   })[];
   current: string;
+  extra?: (current: string) => React.ReactNode;
   onChange: (current: string) => void;
 }
 
 interface IContextProps {
-  form?: FormInstance;
+  ee?: EventEmitter;
   current: string;
   loading: boolean;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
@@ -41,6 +37,7 @@ interface IContextProps {
 }
 
 const context = React.createContext<IContextProps>({
+  ee: undefined,
   current: '',
   loading: false,
   setLoading: () => {},
@@ -61,35 +58,20 @@ function useFooterEffect(effect: (ctx: IContextProps) => void, deps: string[]) {
     deps.forEach((dep) => {
       const tmpFunc = () => func.current(ctx);
       persisFunc.push(tmpFunc);
-      ee.on(dep, tmpFunc);
+      ctx.ee?.on(dep, tmpFunc);
     });
 
     return () => {
       deps.forEach((dep, idx) => {
-        ee.off(dep, persisFunc[idx]);
+        ctx.ee?.off(dep, persisFunc[idx]);
       });
     };
   }, []);
 }
 
-function FormContainer({
-  form,
-  children,
-}: {
-  form?: FormInstance;
-  children: React.ReactNode;
-}) {
-  return form ? (
-    <Form validateTrigger="onBlur" layout="vertical" form={form}>
-      {children}
-    </Form>
-  ) : (
-    <>{children}</>
-  );
-}
-
-function Steps({ form, items, current, onChange }: IStepsProps) {
+function Steps({ items, extra, current, onChange }: IStepsProps) {
   const [loading, setLoading] = useState(false);
+  const ee = useRef(new EventEmitter());
 
   const dispatch = (sign: number) => {
     if (sign === 0) return;
@@ -102,9 +84,15 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
   const renderPrev = () => {
     const stepsCurrent = items.findIndex((i) => i.key === current);
     if (stepsCurrent === 0) {
-      return <Button onClick={() => ee.emit(BUTTON_KEYS.CANCEL)}>取消</Button>;
+      return (
+        <Button onClick={() => ee.current.emit(BUTTON_KEYS.CANCEL)}>
+          取消
+        </Button>
+      );
     }
-    return <Button onClick={() => ee.emit(BUTTON_KEYS.PREV)}>上一步</Button>;
+    return (
+      <Button onClick={() => ee.current.emit(BUTTON_KEYS.PREV)}>上一步</Button>
+    );
   };
 
   const renderNext = () => {
@@ -112,7 +100,7 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
     if (stepsCurrent === items.length - 1) {
       return (
         <Button
-          onClick={() => ee.emit(BUTTON_KEYS.ACHIEVE)}
+          onClick={() => ee.current.emit(BUTTON_KEYS.ACHIEVE)}
           ghost
           type="primary"
         >
@@ -121,12 +109,11 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
       );
     }
     return (
-      <Button type="primary" onClick={() => ee.emit(BUTTON_KEYS.NEXT)}>
+      <Button type="primary" onClick={() => ee.current.emit(BUTTON_KEYS.NEXT)}>
         下一步
       </Button>
     );
   };
-
   const stepsCurrent = useMemo(
     () => items.findIndex((i) => i.key === current),
     [current, items],
@@ -134,7 +121,14 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
 
   return (
     <context.Provider
-      value={{ current, form, onChange, loading, dispatch, setLoading }}
+      value={{
+        current,
+        ee: ee.current,
+        onChange,
+        loading,
+        dispatch,
+        setLoading,
+      }}
     >
       <Card
         className="l-steps-container"
@@ -150,14 +144,13 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
         />
         <Spin spinning={loading}>
           <div className="l-steps-content">
-            <FormContainer form={form}>
-              {items[stepsCurrent]?.content()}
-            </FormContainer>
+            {items[stepsCurrent]?.content()}
           </div>
         </Spin>
         <footer className="l-steps-footer">
           <Space size={8}>
             {renderPrev()}
+            {extra?.(current)}
             {renderNext()}
           </Space>
         </footer>
@@ -166,7 +159,6 @@ function Steps({ form, items, current, onChange }: IStepsProps) {
   );
 }
 
-Steps.useForm = Form.useForm;
 Steps.useFooterEffect = useFooterEffect;
 Steps.BUTTON_KEYS = BUTTON_KEYS;
 

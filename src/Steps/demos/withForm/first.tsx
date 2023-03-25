@@ -1,19 +1,20 @@
-import { Form, Input, message, Select } from 'antd';
+import { Form, Input, InputNumber, message, Select } from 'antd';
 import { Steps } from 'l-idea';
 import React from 'react';
 
 export default () => {
+  const form = Form.useFormInstance();
+
   Steps.useFooterEffect(() => {
     message.warning('点击了取消');
   }, [Steps.BUTTON_KEYS.CANCEL]);
 
   Steps.useFooterEffect(
-    ({ setLoading, form, dispatch }) => {
+    ({ setLoading, dispatch }) => {
       setLoading(true);
       form
-        ?.validateFields()
-        .then((values) => {
-          console.log(values);
+        .validateFields()
+        .then(() => {
           dispatch(1);
         })
         .finally(() => {
@@ -24,9 +25,9 @@ export default () => {
   );
 
   return (
-    <div style={{ width: 250, margin: '12px auto' }}>
+    <>
       <Form.Item
-        name="name"
+        name={['basicInfo', 'name']}
         label="名称"
         rules={[
           {
@@ -37,7 +38,19 @@ export default () => {
         <Input />
       </Form.Item>
       <Form.Item
-        name="gentle"
+        name={['basicInfo', 'age']}
+        label="年龄"
+        rules={[
+          {
+            required: true,
+          },
+        ]}
+        initialValue={0}
+      >
+        <InputNumber min={0} />
+      </Form.Item>
+      <Form.Item
+        name={['basicInfo', 'gentle']}
         label="性别"
         rules={[
           {
@@ -47,13 +60,15 @@ export default () => {
       >
         <Select
           allowClear
-          labelInValue
           options={[
             { label: '男', value: 'man' },
-            { label: '女', value: 'women' },
+            { label: '女', value: 'woman' },
           ]}
         />
       </Form.Item>
-    </div>
+      <Form.Item name={['basicInfo', 'address']} label="地址">
+        <Input.TextArea />
+      </Form.Item>
+    </>
   );
 };
